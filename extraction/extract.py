@@ -40,6 +40,7 @@ def extract_grid_load(api_key, country_code, start_date, end_date):
     requests_cache.install_cache(
         cache_name='entsoe_api_cache', 
         backend='sqlite', 
+        ignored_parameters=['securityToken'],
         expire_after=86400 * 30  # Keep historical data cached for 30 days
     )
     
