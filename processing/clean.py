@@ -59,7 +59,6 @@ WEATHER_BOUNDS = {
 WEATHER_PRECEDING_HOUR_COLS = ["shortwave_radiation", "precipitation"]
 
 
-# --------------------------------- file helpers ------------------------------- #
 def read_csv_utc(path):
     """Read a CSV with a 'time' column into a DataFrame with UTC-aware timestamps."""
     path = Path(path)
@@ -91,7 +90,6 @@ def _prepare(df, keys=("time",)):
     return df.reset_index(drop=True)
 
 
-# ------------------------------- shared steps --------------------------------- #
 def to_hourly(df, min_readings=MIN_READINGS_PER_HOUR):
     """
     15-minute frame (with a UTC 'time' column) -> hourly frame indexed by hour start.
@@ -134,7 +132,6 @@ def _report_remaining_nans(df, cols=None):
         print("  no NaN left")
 
 
-# --------------------------------- grid load ---------------------------------- #
 def clean_grid_load(raw):
     """Raw ENTSO-E load (15-min) -> clean hourly frame ['time', 'Total_Load_MW']."""
     col = "Total_Load_MW"
@@ -173,7 +170,6 @@ def clean_grid_load(raw):
     return hourly.reset_index()
 
 
-# --------------------------------- generation --------------------------------- #
 def clean_generation(raw):
     """Raw ENTSO-E generation per type (15-min) -> clean hourly frame."""
     df = _prepare(raw)

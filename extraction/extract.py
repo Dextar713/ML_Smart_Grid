@@ -36,13 +36,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 CACHE_DIR = PROJECT_ROOT / "cache"  # HTTP response cache (git-ignored via *.sqlite)
 
-# Dates like "20210101" are interpreted as local midnight in this timezone.
 DEFAULT_TZ = "Europe/Berlin"
 
 
-# --------------------------------------------------------------------------- #
-# Shared helpers
-# --------------------------------------------------------------------------- #
+
 def _read_cached_csv(save_path):
     print(f"Loading cached data directly from {save_path}...")
     df = pd.read_csv(save_path)
@@ -81,9 +78,7 @@ def _entsoe_client(api_key):
     return EntsoePandasClient(api_key=api_key, session=session)
 
 
-# --------------------------------------------------------------------------- #
-# 1) Grid load (ENTSO-E)
-# --------------------------------------------------------------------------- #
+
 def extract_grid_load(api_key, country_code, start_date, end_date, tz=DEFAULT_TZ):
     """
     Extracts grid load data from the ENTSO-E API for a specified country and time period.
@@ -129,9 +124,7 @@ def extract_grid_load(api_key, country_code, start_date, end_date, tz=DEFAULT_TZ
     return grid_load_df
 
 
-# --------------------------------------------------------------------------- #
-# 2) Actual generation per production type (ENTSO-E)
-# --------------------------------------------------------------------------- #
+
 def _clean_column_name(name):
     """'Wind Onshore' -> 'Wind_Onshore_MW'"""
     return re.sub(r"[^0-9a-zA-Z]+", "_", str(name)).strip("_") + "_MW"
@@ -201,9 +194,7 @@ def extract_generation(api_key, zone_code, start_date, end_date, tz=DEFAULT_TZ):
     return gen_df
 
 
-# --------------------------------------------------------------------------- #
-# 3) Historical weather (Open-Meteo archive API, no API key needed)
-# --------------------------------------------------------------------------- #
+
 WEATHER_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
 # The archive (ERA5 reanalysis) lags real time by a few days.
