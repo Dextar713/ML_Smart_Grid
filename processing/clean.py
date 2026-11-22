@@ -35,8 +35,8 @@ CLEAN_DIR = DATA_DIR / "clean"
 # ----------------------------- cleaning settings ----------------------------- #
 MIN_READINGS_PER_HOUR = 2      # of 4 quarter-hours; fewer -> that hour is NaN
 MAX_GAP_HOURS = 6              # linear interpolation fills gaps up to this length
-MAX_NAN_PCT = 50.0              # columns with more NaN than this (%) are dropped
-SPIKE_N_SIGMAS = 10            # isolated-spike threshold, in robust standard deviations
+MAX_NAN_PCT = 10.0              # columns with more NaN than this (%) are dropped
+SPIKE_N_SIGMAS = 4            # isolated-spike threshold, in robust standard deviations
 
 # Columns whose NaNs AFTER the last reported value mean "0 MW", not "missing".
 # Nuclear: Germany shut down its last reactors on 2023-04-15.
