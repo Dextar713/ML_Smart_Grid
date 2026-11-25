@@ -37,9 +37,35 @@ def read_clean(path):
     return df
 
 
-def read_merged(path):
-    """Read a merged CSV back with 'time' as a UTC DatetimeIndex."""
-    return read_clean(path).set_index("time")
+
+def save_merged(df, path):
+    """Check the merged hourly table, then save it as CSV (index is written as the 'time' column)."""
+    path = Path(path)
+    if not isinstance(df.index, pd.DatetimeIndex) or df.index.tz is None:
+        raise ValueError("index must be a timezone-aware DatetimeIndex")
+    df = df.tz_convert("UTC") if str(df.index.tz) != "UTC" else df.copy()
+    df.index.name = "time"
+    if df.isna().any().any():
+        raise ValueError(f"{int(df.isna().sum().sum())} NaN left - fix them before saving")
+    if df.index.has_duplicates or not df.index.is_monotonic_increasing:
+        raise ValueError("index must be unique and sorted")
+    if not (df.index.to_series().diff().dropna() == pd.Timedelta("1h")).all():
+        raise ValueError("index is not continuous hourly (missing hours)")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path)
+
+    pd.testing.assert_frame_equal(load_merged(path), df, check_freq=False)  # read back and compare
+    print(f"Saved {df.shape[0]:,} rows x {df.shape[1]} columns "
+          f"({df.index[0]:%Y-%m-%d %H:%M} to {df.index[-1]:%Y-%m-%d %H:%M} UTC) -> {path}")
+    return path
+
+
+def load_merged(path):
+    """Read a saved merged CSV back with a UTC DatetimeIndex named 'time'."""
+    df = pd.read_csv(path, index_col="time", float_precision="round_trip")
+    df.index = pd.to_datetime(df.index, utc=True)
+    return df
 
 
 def average_weather(weather, weights=None, locations=None):
@@ -105,63 +131,24 @@ def _time_indexed(df, name):
     return df.sort_index()
 
 
-def merge_datasets(load, weather_avg, generation, how="inner"):
-    """
-    Join load (target), averaged weather and generation on the UTC hour.
+def merge_datasets(load, weather, generation):
+    """Join load (target), weather and generation on their shared UTC hourly index."""
+    frames = {"load": load, "weather": weather, "generation": generation}
 
-    Parameters
-    - load        : DataFrame with 'time' and 'Total_Load_MW' (cleaned, hourly).
-    - weather_avg : output of average_weather().
-    - generation  : cleaned hourly generation DataFrame.
-    - how         : 'inner' (default) keeps only hours present in all three;
-                    'outer' keeps every hour and leaves NaN where a source has no data.
+    # 1) every input needs a unique, timezone-aware time index
+    for name, df in frames.items():
+        if not isinstance(df.index, pd.DatetimeIndex) or df.index.tz is None:
+            raise ValueError(f"{name}: index must be a timezone-aware DatetimeIndex (UTC)")
+        if df.index.has_duplicates:
+            raise ValueError(f"{name}: duplicated timestamps")
 
-    Prints how many rows each source has, how many survive, and any NaN left.
-    Returns a DataFrame indexed by UTC 'time', columns = load, weather..., generation...
-    """
-    frames = {"load": _time_indexed(load, "load"),
-              "weather": _time_indexed(weather_avg, "weather"),
-              "generation": _time_indexed(generation, "generation")}
+    # 2) inner join = keep only the hours present in all three (load first, so the target is column 1)
+    merged = load.join(weather, how="inner").join(generation, how="inner").sort_index()
 
-    seen = {}
-    for name, f in frames.items():
-        for c in f.columns:
-            if c in seen:
-                raise ValueError(f"Column '{c}' exists in both {seen[c]} and {name}")
-            seen[c] = name
-
-    merged = frames["load"].join(frames["weather"], how=how).join(frames["generation"], how=how)
-
-    print("Merge:", ", ".join(f"{n} {len(f):,} rows" for n, f in frames.items()),
-          f"-> merged {len(merged):,} rows ({how} join)")
-    for n, f in frames.items():
-        lost = len(f) - f.index.isin(merged.index).sum()
-        if lost:
-            print(f"  WARNING: {lost:,} {n} hours are not in the merged table")
+    # 3) report what was dropped and what is still empty
+    for name, df in frames.items():
+        print(f"{name:<10} {len(df):>7,} rows -> {len(merged):,} merged ({len(df) - len(merged):,} dropped)")
     nan = merged.isna().sum()
-    nan = nan[nan > 0]
-    for c, k in nan.items():
-        print(f"  WARNING: {k} NaN in {c}")
-    if nan.empty:
-        print("  no NaN in the merged table")
+    print("NaN left:", nan[nan > 0].to_dict() or "none")
     return merged
-
-
-def build_merged(start_date, end_date, load_zone="DE", generation_zone="DE_LU",
-                 weather_country="DE", weights=None):
-    """Read the cleaned CSVs, average the weather, merge, save to data/merged/."""
-    load = read_clean(CLEAN_DIR / f"grid_load_{load_zone}_{start_date}_{end_date}_clean.csv")
-    gen = read_clean(CLEAN_DIR / f"generation_{generation_zone}_{start_date}_{end_date}_clean.csv")
-    weather = read_clean(CLEAN_DIR / f"weather_{weather_country}_{start_date}_{end_date}_clean.csv")
-
-    merged = merge_datasets(load, average_weather(weather, weights=weights), gen)
-
-    MERGED_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = MERGED_DIR / f"merged_hourly_{start_date}_{end_date}.csv"
-    merged.to_csv(out_path)  # index is saved as the 'time' column
-    print(f"saved -> {out_path}  ({merged.shape[0]:,} rows, {merged.shape[1]} columns)")
-    return merged
-
-
-if __name__ == "__main__":
-    build_merged("20210101", "20260101")
+    
